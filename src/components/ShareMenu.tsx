@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Platform = { key: string; label: string; color: string; href: (u: string, t: string) => string };
 
@@ -28,11 +28,7 @@ export function ShareMenu({
   const T = useTranslations("share");
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [canNative, setCanNative] = useState(false);
-
-  useEffect(() => {
-    setCanNative(typeof navigator !== "undefined" && typeof navigator.share === "function");
-  }, []);
+  const canNative = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   const u = encodeURIComponent(link);
   const t = encodeURIComponent(text);
@@ -53,6 +49,10 @@ export function ShareMenu({
   };
 
   const nativeShare = async () => {
+    if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
+      setOpen(false);
+      return;
+    }
     try {
       await navigator.share({ title: T("siteName"), text, url: link });
     } catch {
