@@ -43,6 +43,10 @@
     "prev": "← Prev",
     "next": "Next →",
     "collapse": "Collapse",
+    "scoreView": "Top Scores",
+    "heatView": "🔥 Most Viewed",
+    "heatLabel": "Heat",
+    "heatTitle": "Successful lookup count",
     "viewDetail": "View @{username}'s score detail"
   },
   "detail": {
