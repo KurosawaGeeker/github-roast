@@ -5,9 +5,11 @@ import { defineRouting } from "next-intl/routing";
  * every existing URL — `/`, `/leaderboard`, `/u/<name>`, and the README-embedded
  * badge/card endpoints — keeps working untouched. English is served under `/en`.
  *
- * `localeDetection: false` is deliberate: the root path must always be Chinese
- * (no Accept-Language redirect), so shared links and SEO for existing zh URLs
- * never silently switch language.
+ * `localeDetection: false` keeps next-intl's built-in detection off; `middleware.ts`
+ * handles language selection itself: a remembered `NEXT_LOCALE` cookie wins, and a
+ * first-time visitor whose Accept-Language top language is English is sent to `/en`.
+ * Visitors without an English-first header — including crawlers that send no
+ * Accept-Language — stay on the zh root, so the canonical Chinese URLs keep their SEO.
  */
 export const routing = defineRouting({
   locales: ["zh", "en"],

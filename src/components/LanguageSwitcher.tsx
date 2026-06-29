@@ -29,7 +29,12 @@ export function LanguageSwitcher() {
           key={loc}
           type="button"
           onClick={() => {
-            if (loc !== locale) router.replace(href, { locale: loc });
+            if (loc !== locale) {
+              // Remember the manual choice so the next visit to the bare root
+              // honors it (the middleware reads this same cookie).
+              document.cookie = `NEXT_LOCALE=${loc}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+              router.replace(href, { locale: loc });
+            }
           }}
           aria-current={loc === locale}
           className={`rounded-full px-2.5 py-1 transition-colors ${
