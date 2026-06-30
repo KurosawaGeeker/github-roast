@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, authConfigured } from "@/lib/auth";
+import { auth, authConfigured } from "../../../../lib/auth";
 import {
   normalizeCommentText,
   normalizeGitHubUsername,
   type CreateProfileCommentResponse,
   type ProfileCommentAuthor,
   type ProfileCommentsResponse,
-} from "@/lib/comments";
-import { createProfileComment, getProfileComments } from "@/lib/db";
+} from "../../../../lib/comments";
+import { createProfileComment, getProfileComments } from "../../../../lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,19 +62,27 @@ export async function POST(
     return jsonNoStore({ error: "empty_comment" }, { status: 400 });
   }
 
-  const anonymous = body.anonymous !== false;
-  const session = authConfigured() ? await auth() : null;
-  const viewerUsername = normalizeGitHubUsername(session?.user.login ?? "");
-  const author: ProfileCommentAuthor =
-    !anonymous && viewerUsername
-      ? { type: "github", username: viewerUsername, avatarUrl: session?.user.image ?? null }
-      : { type: "anonymous" };
+  const anonymous = body.anonymous === true;
+  let author: ProfileCommentAuthor;
+  let authorGithubId: number | undefined;
+  if (anonymous) {
+    author = { type: "anonymous" };
+  } else {
+    const session = authConfigured() ? await auth() : null;
+    const viewerUsername = normalizeGitHubUsername(session?.user.login ?? "");
+    if (!viewerUsername) {
+      return jsonNoStore({ error: "authentication_required" }, { status: 401 });
+    }
+
+    author = { type: "github", username: viewerUsername, avatarUrl: session?.user.image ?? null };
+    authorGithubId = session?.user.githubId;
+  }
 
   const comment = await createProfileComment({
     targetUsername: target,
     text,
     author,
-    authorGithubId: author.type === "github" ? session?.user.githubId : undefined,
+    authorGithubId,
   });
 
   if (!comment) {

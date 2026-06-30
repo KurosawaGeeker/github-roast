@@ -347,15 +347,22 @@ html[data-theme="light"] [data-force-dark] .text-orange-400 {
 
 @keyframes mobile-danmaku {
   0% {
-    transform: translate3d(105vw, 0, 0);
+    opacity: 1;
+    transform: translate3d(calc(100vw - 2.5rem), 0, 0);
+  }
+  94% {
+    opacity: 1;
   }
   100% {
-    transform: translate3d(calc(-100% - 105vw), 0, 0);
+    opacity: 0;
+    transform: translate3d(calc(-100% - 2rem), 0, 0);
   }
 }
 
 .mobile-danmaku-comment {
-  animation: mobile-danmaku 20s linear 1 forwards;
+  animation: mobile-danmaku 20s linear infinite;
+  opacity: 0;
+  transform: translate3d(calc(100vw - 2.5rem), 0, 0);
   will-change: transform;
 }
 
