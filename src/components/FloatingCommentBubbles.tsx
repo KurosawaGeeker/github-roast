@@ -33,13 +33,16 @@ type FloatingCommentLang = "zh" | "en";
 interface FloatingCommentLabels {
   anonymous: string;
   anonymousActive: string;
+  authRequired: string;
   button: string;
   cancel: string;
   failed: string;
+  hideDanmaku: string;
   panelTitle: string;
   placeholder: string;
   send: string;
   sending: string;
+  showDanmaku: string;
 }
 
 // Spread positions for the floating wall — bubbles cycle through these so any
@@ -69,26 +72,32 @@ const ANONYMOUS_LABEL: Record<FloatingCommentLang, string> = {
 
 const COMMENT_LABELS: Record<FloatingCommentLang, FloatingCommentLabels> = {
   zh: {
-    anonymous: "匿名",
-    anonymousActive: "匿名",
+    anonymous: "匿名发布",
+    anonymousActive: "已匿名",
+    authRequired: "请先登录,或选择匿名发布",
     button: "留言",
     cancel: "取消",
     failed: "发送失败，稍后再试",
+    hideDanmaku: "关闭弹幕",
     panelTitle: "发送留言",
     placeholder: "写点狠的 🔥",
     send: "发送",
     sending: "发送中",
+    showDanmaku: "显示弹幕",
   },
   en: {
-    anonymous: "Anonymous",
-    anonymousActive: "Anonymous",
+    anonymous: "Post anonymously",
+    anonymousActive: "Anonymous on",
+    authRequired: "Sign in first, or post anonymously.",
     button: "Message",
     cancel: "Cancel",
     failed: "Failed to send. Try again.",
+    hideDanmaku: "Hide barrage",
     panelTitle: "Leave a message",
     placeholder: "Write a quick note 🔥",
     send: "Send",
     sending: "Sending",
+    showDanmaku: "Show barrage",
   },
 };
 
@@ -99,7 +108,6 @@ const COMMENT_LABELS: Record<FloatingCommentLang, FloatingCommentLabels> = {
 const FLOATING_COMMENT_SIDE_ROOM = "calc((100vw - 56rem) / 2 - 2rem)";
 const FLOATING_COMMENT_CENTER_GAP = "1rem";
 const FLOATING_COMMENT_CENTER_HALF_WIDTH = "28rem";
-const MOBILE_DANMAKU_MIN_COUNT = 16;
 const MOBILE_DANMAKU_TOPS = [
   "0.5rem",
   "3rem",
@@ -109,6 +117,8 @@ const MOBILE_DANMAKU_TOPS = [
   "13rem",
   "15.5rem",
 ];
+const MOBILE_DANMAKU_STAGGER_SECONDS = 0.5;
+const MOBILE_DANMAKU_LOOP_GAP_SECONDS = 5;
 
 function bubbleStyle(bubble: FloatingCommentBubble): CSSProperties {
   const laneOffset = `min(${bubble.laneOffset}, 5vw)`;
@@ -123,21 +133,20 @@ function bubbleStyle(bubble: FloatingCommentBubble): CSSProperties {
   };
 }
 
-function mobileDanmakuStyle(index: number): CSSProperties {
-  return {
-    top: MOBILE_DANMAKU_TOPS[index % MOBILE_DANMAKU_TOPS.length],
-    animationDelay: `-${(index * 2.7) % 24}s`,
-    animationDuration: `${18 + (index % 5) * 2}s`,
-  };
+function mobileDanmakuCycleDuration(itemCount: number): number {
+  return Math.max(
+    MOBILE_DANMAKU_LOOP_GAP_SECONDS,
+    (Math.max(itemCount, 1) - 1) * MOBILE_DANMAKU_STAGGER_SECONDS +
+      MOBILE_DANMAKU_LOOP_GAP_SECONDS,
+  );
 }
 
-function repeatForMobileDanmaku(bubbles: FloatingCommentBubble[]): FloatingCommentBubble[] {
-  if (bubbles.length === 0) return [];
-  if (bubbles.length >= MOBILE_DANMAKU_MIN_COUNT) return bubbles;
-  return Array.from(
-    { length: MOBILE_DANMAKU_MIN_COUNT },
-    (_, index) => bubbles[index % bubbles.length],
-  );
+function mobileDanmakuStyle(index: number, itemCount: number): CSSProperties {
+  return {
+    top: MOBILE_DANMAKU_TOPS[index % MOBILE_DANMAKU_TOPS.length],
+    animationDelay: `${index * MOBILE_DANMAKU_STAGGER_SECONDS}s`,
+    animationDuration: `${mobileDanmakuCycleDuration(itemCount)}s`,
+  };
 }
 
 /** Lay out a flat list of {author, text} items into scattered floating bubbles. */
@@ -235,11 +244,12 @@ export function FloatingCommentBubbles({
   const labels = COMMENT_LABELS[lang];
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [anonymous, setAnonymous] = useState(true);
+  const [anonymous, setAnonymous] = useState(false);
   const [comments, setComments] = useState<ProfileComment[]>(initialComments);
   const [danmaku, setDanmaku] = useState<DanmakuLine[]>(initialDanmaku);
   const [sending, setSending] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [showMobileDanmaku, setShowMobileDanmaku] = useState(true);
+  const [submitError, setSubmitError] = useState<"auth" | "send" | null>(null);
 
   // When a profile has few real comments, top up the wall with AI danmaku
   // (always anonymous). Fetch-and-persist lazily the first time, only if none
@@ -262,8 +272,9 @@ export function FloatingCommentBubbles({
   // The danmaku wall is intentionally bilingual for everyone: show both the zh
   // and en lines (interleaved), so an English visitor never faces an all-Chinese
   // wall and the page reads like a global crowd reacting.
+  const visibleComments = [...comments].reverse();
   const items: { author: FloatingCommentAuthor; text: string }[] = [
-    ...comments.map((c) => ({ author: c.author, text: c.text })),
+    ...visibleComments.map((c) => ({ author: c.author, text: c.text })),
     ...(needsDanmaku
       ? interleaveDanmakuByLang(danmaku).map((d) => ({
           author: { type: "anonymous" } as FloatingCommentAuthor,
@@ -272,7 +283,7 @@ export function FloatingCommentBubbles({
       : []),
   ];
   const bubbles = items.map((item, index) => layoutBubble(item.author, item.text, index));
-  const mobileDanmakuBubbles = repeatForMobileDanmaku(bubbles);
+  const mobileDanmakuBubbles = bubbles;
   const trimmedDraft = normalizeCommentText(draft);
   const canSend = Boolean(trimmedDraft) && !sending;
 
@@ -281,7 +292,7 @@ export function FloatingCommentBubbles({
     if (!trimmedDraft || sending) return;
 
     setSending(true);
-    setFailed(false);
+    setSubmitError(null);
     try {
       const response = await fetch(
         `/api/profile-comments/${encodeURIComponent(profileUsername)}`,
@@ -291,14 +302,18 @@ export function FloatingCommentBubbles({
           body: JSON.stringify({ anonymous, text: trimmedDraft }),
         },
       );
-      if (!response.ok) throw new Error("comment_failed");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        setSubmitError(payload?.error === "authentication_required" ? "auth" : "send");
+        return;
+      }
 
       const payload = (await response.json()) as CreateProfileCommentResponse;
       setComments((current) => [...current, payload.comment]);
       setDraft("");
       setOpen(false);
     } catch {
-      setFailed(true);
+      setSubmitError("send");
     } finally {
       setSending(false);
     }
@@ -323,22 +338,24 @@ export function FloatingCommentBubbles({
         ))}
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 top-16 z-20 h-72 overflow-hidden xl:hidden">
-        {mobileDanmakuBubbles.map((bubble, index) => (
-          <div
-            key={`mobile-${bubble.side}-${index}-${bubble.text}`}
-            className="mobile-danmaku-comment absolute left-0 inline-flex max-w-[88vw]"
-            style={mobileDanmakuStyle(index)}
-          >
-            <div className="floating-comment-mobile inline-flex max-w-[88vw] items-center gap-2 rounded-full border border-orange-300/15 bg-zinc-950/60 px-2.5 py-1.5 text-orange-200/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05] backdrop-blur-sm">
-              <FloatingCommentInlineAuthor author={bubble.author} lang={lang} />
-              <span className="min-w-0 truncate text-xs font-semibold text-orange-200">
-                {bubble.text}
-              </span>
+      {showMobileDanmaku && (
+        <div className="pointer-events-none fixed inset-x-0 top-16 z-20 h-72 overflow-hidden xl:hidden">
+          {mobileDanmakuBubbles.map((bubble, index) => (
+            <div
+              key={`mobile-${bubble.side}-${index}-${bubble.text}`}
+              className="mobile-danmaku-comment absolute left-0 inline-flex max-w-[88vw]"
+              style={mobileDanmakuStyle(index, mobileDanmakuBubbles.length)}
+            >
+              <div className="floating-comment-mobile inline-flex max-w-[88vw] items-center gap-2 rounded-full border border-orange-300/15 bg-zinc-950/60 px-2.5 py-1.5 text-orange-200/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05] backdrop-blur-sm">
+                <FloatingCommentInlineAuthor author={bubble.author} lang={lang} />
+                <span className="min-w-0 truncate text-xs font-semibold text-orange-200">
+                  {bubble.text}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
         {open && (
@@ -361,7 +378,7 @@ export function FloatingCommentBubbles({
               value={draft}
               onChange={(event) => {
                 setDraft(Array.from(event.target.value).slice(0, COMMENT_MAX_LENGTH).join(""));
-                setFailed(false);
+                setSubmitError(null);
               }}
               rows={4}
               maxLength={COMMENT_MAX_LENGTH}
@@ -373,8 +390,15 @@ export function FloatingCommentBubbles({
               <button
                 type="button"
                 aria-pressed={anonymous}
-                onClick={() => setAnonymous((value) => !value)}
-                className="rounded-full border border-orange-300/20 bg-black/35 px-3 py-1 text-xs font-semibold text-orange-200/80 hover:bg-orange-950/40 aria-pressed:bg-orange-500/15 aria-pressed:text-orange-100"
+                onClick={() => {
+                  setAnonymous((value) => !value);
+                  setSubmitError(null);
+                }}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  anonymous
+                    ? "border-orange-300/50 bg-orange-500/20 text-orange-100 shadow-[0_0_18px_rgba(249,115,22,0.18)]"
+                    : "border-orange-300/20 bg-black/35 text-orange-200/80 hover:bg-orange-950/40"
+                }`}
               >
                 {anonymous ? labels.anonymousActive : labels.anonymous}
               </button>
@@ -384,8 +408,10 @@ export function FloatingCommentBubbles({
             </div>
 
             <div className="mt-4 flex items-center justify-between gap-3">
-              {failed ? (
-                <span className="text-xs text-red-300/80">{labels.failed}</span>
+              {submitError ? (
+                <span className="text-xs text-red-300/80">
+                  {submitError === "auth" ? labels.authRequired : labels.failed}
+                </span>
               ) : (
                 <span aria-hidden="true" />
               )}
@@ -399,6 +425,15 @@ export function FloatingCommentBubbles({
             </div>
           </form>
         )}
+
+        <button
+          type="button"
+          aria-pressed={showMobileDanmaku}
+          onClick={() => setShowMobileDanmaku((value) => !value)}
+          className="rounded-full border border-orange-300/20 bg-zinc-950/85 px-3 py-2 text-xs font-semibold text-orange-200/80 shadow-[0_14px_36px_rgba(0,0,0,0.35)] backdrop-blur transition hover:bg-orange-950/60 hover:text-orange-100 xl:hidden"
+        >
+          {showMobileDanmaku ? labels.hideDanmaku : labels.showDanmaku}
+        </button>
 
         <button
           type="button"
