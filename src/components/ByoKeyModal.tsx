@@ -63,6 +63,9 @@ export function ByoKeyModal({
 
   const clear = () => {
     localStorage.removeItem(BYO_STORAGE_KEY);
+    setBaseURL(PRESETS[0].baseURL);
+    setApiKey("");
+    setModel(PRESETS[0].model);
     onSave(null);
   };
 
